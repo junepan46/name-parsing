@@ -1,0 +1,156 @@
+import re
+import itertools  # itertools.combinations may be useful
+import networkx as nx
+import spacy
+from operator import itemgetter
+
+en = spacy.load('en')
+
+captions=['Yuzheng and Yuxing Zhang attending the gala event','The dinner scene','The End','Mount Sinai Health System Trustee Jim Tisch','Adam Smith and his family','Yuzheng Sun, Liyuan Cui, Yanlei and Sida De Peng at some random event','Mary Smith and Dr. John Biden','The Queen Elizabeth','The Mad dinner scene','Liyuan Cui, Yuzheng Sun, Anne Chen-Ton, Anna Ton, and Liz Mathenge at this event']
+
+d=[',',' with ',' at ']
+
+photo_name=dict()
+i=1
+
+regex = re.compile('([A-Z][a-z]*) (?:and) ([A-Z][a-z]*) ([A-Za-z ]*)')
+regex2 = re.compile('(?:The) ([A-Za-z ]*)')
+regex3 = re.compile('([a-z]*) ([a-z]*)')
+for c in captions[:len(captions)]:
+    
+   
+    
+    names=[]
+    okay_items=[]
+    okay_names=[]
+    
+    ctext=[c]
+    for dd in d:
+        newctext=[]
+        for textstr in ctext:
+            newctext.extend(textstr.split(dd))
+        ctext=newctext
+        
+    
+    ctext=[textstr.strip() for textstr in ctext]
+    ctext=[textstr.replace('Dr. ','') for textstr in ctext]
+    ctext=[textstr.replace('Mrs. ','') for textstr in ctext] 
+    ctext=[textstr.replace('Esq. ','') for textstr in ctext]
+    ctext=[textstr.replace('Tenor ','') for textstr in ctext]
+    ctext=[textstr.replace('Soprano ','') for textstr in ctext]
+    ctext=[textstr.replace('Choreographer ','') for textstr in ctext]
+    
+
+    
+#     print(ctext)
+
+    
+    for name in ctext:
+        gps1=re.match('([A-Z][a-z]*) ([A-Za-z\- ]*)',name)
+        if (gps1!=None):
+            names.append(gps1.group(1)+" "+gps1.group(2))
+    
+    for name in ctext:
+        gps2=re.match('(?:and) ([A-Z][a-z]*) ([A-Za-z ]*)',name)
+        if (gps2!=None):
+            names.append(gps2.group(1)+" "+gps2.group(2)) 
+            
+#     names=[textstr.replace('performing ','') for textstr in names]
+
+########step 2: fix wife and husband common last name combinations#########            
+         
+    for name in ctext:
+        gps=re.match('([A-Z][a-z]*) (?:and) ([A-Z][a-z]*) ([A-Za-z ]*)',name)
+        if (gps!=None):
+            names.append(gps.group(1)+" "+gps.group(3))
+            names.append(gps.group(2)+" "+gps.group(3))
+
+       
+            
+#     print(names)
+    okay_items.extend([x for x in names if not regex.match(x)])
+#     print(okay_items)
+
+    name2=[]
+    for c in okay_items:
+        name2.extend(c.split(' and '))
+
+    name2=[textstr.strip() for textstr in name2]
+# name2=[textstr.replace('Dr. ','') for textstr in name2]         
+
+#     print(name2)
+
+############Remove "The XXX XXX" phrases####################
+
+    okay_names.extend([x for x in name2 if not (regex2.match(x) \
+                                            or regex3.match(x))])
+
+#     print(okay_names)
+
+      
+#############try spacy#############################
+
+    for sp in ctext:
+        sents = en(str(sp))
+        people = [ee for ee in sents.ents if ee.label_ == 'PERSON']
+    
+    spacylist=[]
+    for p in people:
+        spacylist.append(str(p))
+    
+    okay_names.extend(spacylist)
+#####################################################    
+    
+# print(names)
+    unq_names2=list(set(okay_names))
+    unq_names2 = list(filter(None, unq_names2))
+# unq_names2.remove('A table centerpiece')
+# unq_names2.remove('friend')
+# unq_names2.remove('friends')
+# unq_names2.remove('The MAD dinner scene')
+    for c in unq_names2:
+        if c.count(' ')>3:
+            unq_names2.remove(c)
+        if c.count(' ')<1:
+            unq_names2.remove(c)
+        if 'and' in c:
+            temp=str(c.replace('and ',''))
+            unq_names2.append(temp)
+            unq_names2.remove(c)
+        
+
+    unq_names2.sort()
+    
+    if len(unq_names2)>0:
+        photo_name[i]=unq_names2
+    
+        i=i+1
+
+# print(unq_names2)
+
+# print(photo_name)
+
+pairs=dict()
+for key,value in photo_name.items():
+    if len(value)>1:
+#         print(value)
+        pairs[key]=list(itertools.combinations(value,2))
+
+# print(pairs)
+
+G = nx.Graph()
+
+for value in pairs.values():
+    G.add_edges_from(value)
+
+name_node=list(G.nodes)
+name_degree=[]
+for i in name_node:
+    degree=G.degree[i]
+    name_degree.append((str(i),degree))
+
+# print(name_degree)    
+
+counts = sorted(name_degree, key=lambda x: (-x[1], x[0]))
+print(counts)
+
